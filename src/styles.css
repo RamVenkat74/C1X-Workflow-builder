@@ -1,0 +1,110 @@
+:host {
+    --primary: #4f46e5;
+    --bg-dark: #111827;
+    --sidebar-bg: #1f2937;
+    --canvas-bg: #f9fafb;
+    --text-main: #f3f4f6;
+    --card-bg: #ffffff;
+    display: block;
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+.workflow-container {
+    display: flex;
+    height: 100vh;
+    background: var(--canvas-bg);
+}
+
+/* Sidebar Styling - Dark & Professional */
+.sidebar {
+    width: 260px;
+    background: var(--bg-dark);
+    color: var(--text-main);
+    padding: 24px;
+    border-right: 1px solid #374151;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.node-item {
+    background: transparent;
+    border: 1px solid #374151;
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.node-item:hover {
+    background: #374151;
+    border-color: var(--primary);
+}
+
+/* Canvas Styling - Modern Dot Grid */
+.canvas-area {
+    flex-grow: 1;
+    position: relative;
+    background-color: var(--canvas-bg);
+    background-image: radial-gradient(#e5e7eb 1.5px, transparent 1.5px);
+    background-size: 24px 24px;
+    /* Clean dot grid [cite: 165] */
+}
+
+/* Node Card Styling (for nodes on canvas) */
+.node-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    padding: 16px;
+    width: 200px;
+    border: 1px solid #e5e7eb;
+    position: absolute;
+}
+
+/* Modern Modal Styling */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    /* Modern blur effect */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    width: 440px;
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+input,
+select {
+    width: 100%;
+    padding: 10px 12px;
+    margin-top: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 20px;
+    float: right;
+}
