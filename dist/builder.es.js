@@ -1,129 +1,228 @@
-var h = Object.defineProperty;
-var g = (f, l, t) => l in f ? h(f, l, { enumerable: !0, configurable: !0, writable: !0, value: t }) : f[l] = t;
-var u = (f, l, t) => g(f, typeof l != "symbol" ? l + "" : l, t);
-class b {
+var w = Object.defineProperty;
+var m = (f, d, e) => d in f ? w(f, d, { enumerable: !0, configurable: !0, writable: !0, value: e }) : f[d] = e;
+var g = (f, d, e) => m(f, typeof d != "symbol" ? d + "" : d, e);
+class v {
   constructor() {
-    u(this, "nodes", []);
-    u(this, "edges", []);
+    g(this, "nodes", []);
+    g(this, "edges", []);
+    g(this, "history", []);
+    g(this, "redoStack", []);
+    this.saveState();
   }
-  addNode(l) {
-    this.nodes.push(l);
+  saveState() {
+    const d = JSON.stringify({ nodes: this.nodes, edges: this.edges });
+    (this.history.length === 0 || this.history[this.history.length - 1] !== d) && (this.history.push(d), this.redoStack = []);
   }
-  addEdge(l, t) {
-    return this.isCircular(l, t) ? (alert("Circular dependency detected! Connection blocked."), !1) : (this.edges.push({ source: l, target: t }), !0);
+  undo() {
+    if (this.history.length <= 1)
+      return !1;
+    const d = this.history.pop();
+    this.redoStack.push(d);
+    const e = JSON.parse(this.history[this.history.length - 1]);
+    return this.nodes = e.nodes, this.edges = e.edges, !0;
   }
-  isCircular(l, t) {
-    const d = [t];
-    for (; d.length > 0; ) {
-      const n = d.pop();
-      if (n === l)
+  redo() {
+    if (this.redoStack.length === 0)
+      return !1;
+    const d = this.redoStack.pop();
+    this.history.push(d);
+    const e = JSON.parse(d);
+    return this.nodes = e.nodes, this.edges = e.edges, !0;
+  }
+  deleteNode(d) {
+    this.nodes = this.nodes.filter((e) => e.id !== d), this.edges = this.edges.filter((e) => e.source !== d && e.target !== d), this.saveState();
+  }
+  deleteEdge(d, e) {
+    this.edges = this.edges.filter((i) => !(i.source === d && i.target === e)), this.saveState();
+  }
+  addNode(d) {
+    this.nodes.push(d), this.saveState();
+  }
+  addEdge(d, e) {
+    return this.isCircular(d, e) ? !1 : (this.edges.push({ source: d, target: e }), this.saveState(), !0);
+  }
+  isCircular(d, e) {
+    const i = [e];
+    for (; i.length > 0; ) {
+      const n = i.pop();
+      if (n === d)
         return !0;
-      this.edges.filter((r) => r.source === n).forEach((r) => d.push(r.target));
+      this.edges.filter((r) => r.source === n).forEach((r) => i.push(r.target));
     }
     return !1;
   }
+  getNodes() {
+    return [...this.nodes];
+  }
+  getEdges() {
+    return [...this.edges];
+  }
   exportJSON() {
     return {
-      workflowId: `c1x-camp-${Date.now()}`,
+      workflowId: `wf-${Date.now()}`,
       nodes: this.nodes,
       edges: this.edges
     };
   }
 }
-class w extends HTMLElement {
+class y extends HTMLElement {
   constructor() {
     super();
-    u(this, "engine", new b());
-    u(this, "dragNode", null);
-    u(this, "offset", { x: 0, y: 0 });
-    u(this, "nodes", []);
-    u(this, "lastSplitId", null);
+    g(this, "engine", new v());
+    g(this, "dragNode", null);
+    g(this, "selectedNodeId", null);
+    g(this, "offset", { x: 0, y: 0 });
+    g(this, "nodes", []);
+    g(this, "lastSplitId", null);
     this.attachShadow({ mode: "open" });
   }
   connectedCallback() {
-    this.render();
+    this.render(), window.addEventListener("keydown", this.onKeyDown.bind(this));
+  }
+  onKeyDown(e) {
+    (e.key === "Delete" || e.key === "Backspace") && this.selectedNodeId && (this.engine.deleteNode(this.selectedNodeId), this.selectedNodeId = null, this.refreshCanvas());
   }
   setupListeners() {
-    var d, n, r, c;
-    const t = (d = this.shadowRoot) == null ? void 0 : d.querySelector("#canvas");
-    t == null || t.addEventListener("mousedown", (i) => {
-      const e = i.target.closest("g.node-group");
-      if (e) {
-        this.dragNode = e;
+    var i, n, r, s, l, c, h, u;
+    const e = (i = this.shadowRoot) == null ? void 0 : i.querySelector("#canvas");
+    e == null || e.addEventListener("mousedown", (t) => {
+      const o = t.target.closest("g.node-group");
+      if (o) {
+        this.dragNode = o, this.selectedNodeId = this.dragNode.getAttribute("data-id"), e.querySelectorAll("g.node-group").forEach((p) => p.classList.remove("selected")), this.dragNode.classList.add("selected");
         const a = this.dragNode.getCTM();
-        this.offset.x = i.clientX - a.e, this.offset.y = i.clientY - a.f;
+        this.offset.x = t.clientX - a.e, this.offset.y = t.clientY - a.f;
+      } else
+        this.selectedNodeId = null, e.querySelectorAll("g.node-group").forEach((a) => a.classList.remove("selected"));
+    }), e == null || e.addEventListener("click", (t) => {
+      const o = t.target.closest(".trash-btn");
+      if (o) {
+        const a = o.getAttribute("data-node-id"), p = o.getAttribute("data-edge-source"), b = o.getAttribute("data-edge-target");
+        a ? this.engine.deleteNode(a) : p && b && this.engine.deleteEdge(p, b), this.refreshCanvas();
       }
-    }), t == null || t.addEventListener("mousemove", (i) => {
+    }), e == null || e.addEventListener("mousemove", (t) => {
       if (this.dragNode) {
-        const e = i.clientX - this.offset.x, a = i.clientY - this.offset.y;
-        this.dragNode.setAttribute("transform", `translate(${e}, ${a})`);
-        const o = this.dragNode.getAttribute("data-id"), s = this.nodes.find((p) => p.id === o);
-        s && (s.x = e, s.y = a), this.updateEdges();
+        const o = t.clientX - this.offset.x, a = t.clientY - this.offset.y;
+        this.dragNode.setAttribute("transform", `translate(${o}, ${a})`);
+        const p = this.nodes.find((b) => b.id === this.dragNode.getAttribute("data-id"));
+        p && (p.x = o, p.y = a), this.updateEdges();
       }
     }), window.addEventListener("mouseup", () => {
       this.dragNode = null;
-    }), (n = this.shadowRoot) == null || n.querySelectorAll(".node-palette-item").forEach((i) => {
-      i.addEventListener("dragstart", (e) => e.dataTransfer.setData("type", e.target.dataset.type));
-    }), t == null || t.addEventListener("dragover", (i) => i.preventDefault()), t == null || t.addEventListener("drop", (i) => {
-      i.preventDefault();
-      const e = t.getBoundingClientRect();
-      this.openConfigModal(i.dataTransfer.getData("type"), i.clientX - e.left, i.clientY - e.top);
-    }), (c = (r = this.shadowRoot) == null ? void 0 : r.querySelector("#export-btn")) == null || c.addEventListener("click", () => {
-      const i = this.engine.exportJSON(), e = new Blob([JSON.stringify(i, null, 2)], { type: "application/json" }), a = URL.createObjectURL(e), o = document.createElement("a");
-      o.href = a, o.download = `workflow-export-${Date.now()}.json`, o.click(), URL.revokeObjectURL(a);
+    }), (n = this.shadowRoot) == null || n.querySelectorAll(".node-palette-item").forEach((t) => {
+      t.addEventListener("dragstart", (o) => o.dataTransfer.setData("type", o.target.dataset.type));
+    }), e == null || e.addEventListener("dragover", (t) => t.preventDefault()), e == null || e.addEventListener("drop", (t) => {
+      t.preventDefault();
+      const o = e.getBoundingClientRect();
+      this.openConfigModal(t.dataTransfer.getData("type"), t.clientX - o.left, t.clientY - o.top);
+    }), (s = (r = this.shadowRoot) == null ? void 0 : r.querySelector("#undo-btn")) == null || s.addEventListener("click", () => {
+      this.engine.undo() && this.refreshCanvas();
+    }), (c = (l = this.shadowRoot) == null ? void 0 : l.querySelector("#redo-btn")) == null || c.addEventListener("click", () => {
+      this.engine.redo() && this.refreshCanvas();
+    }), (u = (h = this.shadowRoot) == null ? void 0 : h.querySelector("#export-btn")) == null || u.addEventListener("click", () => {
+      const t = this.engine.exportJSON(), o = new Blob([JSON.stringify(t, null, 2)], { type: "application/json" }), a = URL.createObjectURL(o), p = document.createElement("a");
+      p.href = a, p.download = `workflow-${Date.now()}.json`, document.body.appendChild(p), p.click(), document.body.removeChild(p), URL.revokeObjectURL(a);
     });
   }
-  openConfigModal(t, d, n) {
-    var c, i;
-    const r = document.createElement("div");
-    r.className = "modal-overlay", r.innerHTML = `
-      <div class="modal-content">
-        <h3>Configure ${t.toUpperCase()}</h3>
-        <input type="text" id="val" placeholder="Description (e.g. Abandoned users)">
-        <button id="add">Apply Changes</button>
-      </div>`, (c = this.shadowRoot) == null || c.appendChild(r), (i = r.querySelector("#add")) == null || i.addEventListener("click", () => {
-      const e = r.querySelector("#val").value || t, a = `node-${Date.now()}`;
-      let o = this.nodes.length > 0 ? this.nodes[this.nodes.length - 1].id : null;
-      this.lastSplitId && (t === "action" || t === "end") && (o = this.lastSplitId);
-      const s = { id: a, type: t, x: d, y: n, text: e, parentId: o };
-      this.nodes.push(s), t === "split" && (this.lastSplitId = a), this.engine.addNode({ id: a, type: t, params: { segmentName: e }, position: { x: d, y: n } }), o && this.engine.addEdge(o, a), this.renderNodeOnCanvas(a, t, d, n, e), this.updateEdges(), r.remove();
-    });
-  }
-  renderNodeOnCanvas(t, d, n, r, c) {
-    var a;
-    const i = (a = this.shadowRoot) == null ? void 0 : a.querySelector("#canvas"), e = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    if (e.setAttribute("transform", `translate(${n}, ${r})`), e.setAttribute("class", "node-group"), e.setAttribute("data-id", t), d === "wait" || d === "end") {
-      const o = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      o.setAttribute("r", "45"), o.setAttribute("fill", d === "wait" ? "#f3f4f6" : "#fee2e2"), o.setAttribute("stroke", "#9ca3af"), e.appendChild(o);
-      const s = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      s.setAttribute("text-anchor", "middle"), s.setAttribute("dy", "5"), s.style.fontSize = "11px", s.textContent = c, e.appendChild(s);
-    } else {
-      const o = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      o.setAttribute("width", "220"), o.setAttribute("height", "90"), o.setAttribute("rx", "10"), o.setAttribute("fill", this.getColor(d)), o.setAttribute("stroke", "#d1d5db"), e.appendChild(o);
-      const s = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      s.setAttribute("x", "15"), s.setAttribute("y", "25"), s.style.fontSize = "10px", s.style.fill = "#9ca3af", s.textContent = d.toUpperCase(), e.appendChild(s);
-      const p = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      p.setAttribute("x", "15"), p.setAttribute("y", "55"), p.style.fontSize = "13px", p.style.fontWeight = "500", p.textContent = c, e.appendChild(p);
+  refreshCanvas() {
+    var r;
+    const e = (r = this.shadowRoot) == null ? void 0 : r.querySelector("#canvas");
+    if (e) {
+      const s = e.querySelector("defs");
+      e.innerHTML = "", s && e.appendChild(s);
     }
-    i == null || i.appendChild(e);
+    const i = this.engine.getNodes(), n = this.engine.getEdges();
+    this.nodes = i.map((s) => {
+      var l;
+      return {
+        id: s.id,
+        type: s.type,
+        x: s.position.x,
+        y: s.position.y,
+        text: s.params.segmentName,
+        parentId: ((l = n.find((c) => c.target === s.id)) == null ? void 0 : l.source) || null
+      };
+    }), this.nodes.forEach((s) => this.renderNodeOnCanvas(s.id, s.type, s.x, s.y, s.text)), this.updateEdges();
   }
-  getColor(t) {
-    return { audience: "#eff6ff", filter: "#fff7ed", split: "#f0fdf4", action: "#fefce8" }[t] || "#ffffff";
+  openConfigModal(e, i, n) {
+    var l, c;
+    const r = document.createElement("div");
+    r.className = "modal-overlay";
+    let s = "";
+    switch (e) {
+      case "audience":
+        s = '<input type="text" id="p1" placeholder="Segment Name">';
+        break;
+      case "wait":
+        s = '<input type="number" id="p1" placeholder="Duration"><select id="p2"><option value="Minutes">Minutes</option><option value="Hours">Hours</option><option value="Days">Days</option></select>';
+        break;
+      case "filter":
+        s = '<select id="p1"><option value="Opened Email">Opened Email</option><option value="Purchased">Purchased</option></select><input type="text" id="p2" placeholder="Value (True/False)">';
+        break;
+      case "action":
+        s = '<select id="p1"><option value="Email">Email</option><option value="SMS">SMS</option><option value="WhatsApp">WhatsApp</option></select><input type="text" id="p2" placeholder="Template ID">';
+        break;
+      default:
+        s = '<input type="text" id="p1" placeholder="Label">';
+    }
+    r.innerHTML = `<div class="modal-content"><h3>${e.toUpperCase()}</h3>${s}<button id="save">Save</button></div>`, (l = this.shadowRoot) == null || l.appendChild(r), (c = r.querySelector("#save")) == null || c.addEventListener("click", () => {
+      var p;
+      const h = r.querySelector("#p1").value, u = (p = r.querySelector("#p2")) == null ? void 0 : p.value, t = {};
+      e === "audience" ? t.segmentName = h : e === "wait" ? (t.duration = Number(h), t.unit = u, t.segmentName = `Wait ${h} ${u}`) : e === "filter" ? (t.condition = h, t.value = u, t.segmentName = `${h}: ${u}`) : e === "action" ? (t.channel = h, t.templateId = u, t.segmentName = `Send ${h}`) : t.segmentName = h;
+      const o = `node-${Date.now()}`;
+      let a = this.nodes.length > 0 ? this.nodes[this.nodes.length - 1].id : null;
+      this.lastSplitId && (e === "action" || e === "end") && (a = this.lastSplitId), e === "split" && (this.lastSplitId = o), this.engine.addNode({ id: o, type: e, params: t, position: { x: i, y: n } }), a && this.engine.addEdge(a, o), this.refreshCanvas(), r.remove();
+    });
+  }
+  renderNodeOnCanvas(e, i, n, r, s) {
+    var u;
+    const l = (u = this.shadowRoot) == null ? void 0 : u.querySelector("#canvas"), c = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    if (c.setAttribute("transform", `translate(${n}, ${r})`), c.setAttribute("class", "node-group"), c.setAttribute("data-id", e), e === this.selectedNodeId && c.classList.add("selected"), i === "wait" || i === "end") {
+      const t = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      t.setAttribute("r", "45"), t.setAttribute("fill", i === "wait" ? "#f3f4f6" : "#fee2e2"), t.setAttribute("stroke", "#9ca3af"), c.appendChild(t);
+      const o = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      o.setAttribute("text-anchor", "middle"), o.setAttribute("dy", "5"), o.style.fontSize = "11px", o.textContent = s, c.appendChild(o);
+    } else {
+      const t = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      t.setAttribute("width", "220"), t.setAttribute("height", "90"), t.setAttribute("rx", "10"), t.setAttribute("fill", this.getColor(i)), t.setAttribute("stroke", "#d1d5db"), c.appendChild(t);
+      const o = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      o.setAttribute("x", "15"), o.setAttribute("y", "25"), o.style.fontSize = "10px", o.style.fill = "#9ca3af", o.textContent = i.toUpperCase(), c.appendChild(o);
+      const a = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      a.setAttribute("x", "15"), a.setAttribute("y", "55"), a.style.fontSize = "13px", a.style.fontWeight = "500", a.textContent = s, c.appendChild(a);
+    }
+    const h = this.createTrashIcon(i === "wait" || i === "end" ? 35 : 210, i === "wait" || i === "end" ? -35 : -10);
+    h.setAttribute("data-node-id", e), c.appendChild(h), l == null || l.appendChild(c);
+  }
+  createTrashIcon(e, i) {
+    const n = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    n.setAttribute("class", "trash-btn"), n.setAttribute("transform", `translate(${e}, ${i})`);
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    r.setAttribute("r", "12"), r.setAttribute("fill", "#ef4444"), n.appendChild(r);
+    const s = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    s.setAttribute("x1", "-5"), s.setAttribute("y1", "-5"), s.setAttribute("x2", "5"), s.setAttribute("y2", "5"), s.setAttribute("stroke", "white"), s.setAttribute("stroke-width", "2"), n.appendChild(s);
+    const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    return l.setAttribute("x1", "5"), l.setAttribute("y1", "-5"), l.setAttribute("x2", "-5"), l.setAttribute("y2", "5"), l.setAttribute("stroke", "white"), l.setAttribute("stroke-width", "2"), n.appendChild(l), n;
+  }
+  getColor(e) {
+    return { audience: "#eff6ff", filter: "#fff7ed", split: "#f0fdf4", action: "#fefce8" }[e] || "#ffffff";
   }
   updateEdges() {
-    var d;
-    const t = (d = this.shadowRoot) == null ? void 0 : d.querySelector("#canvas");
-    t == null || t.querySelectorAll(".edge-path").forEach((n) => n.remove()), this.nodes.forEach((n) => {
+    var i;
+    const e = (i = this.shadowRoot) == null ? void 0 : i.querySelector("#canvas");
+    e == null || e.querySelectorAll(".edge-container").forEach((n) => n.remove()), this.nodes.forEach((n) => {
       if (n.parentId) {
-        const r = this.nodes.find((c) => c.id === n.parentId);
+        const r = this.nodes.find((s) => s.id === n.parentId);
         r && this.drawManhattanEdge(r, n);
       }
     });
   }
-  drawManhattanEdge(t, d) {
+  drawManhattanEdge(e, i) {
     var a;
-    const n = (a = this.shadowRoot) == null ? void 0 : a.querySelector("#canvas"), r = { x: t.x + 110, y: t.y + (t.type === "wait" || t.type === "end" ? 45 : 90) }, c = { x: d.x + 110, y: d.y - (d.type === "wait" || d.type === "end" ? 45 : 0) }, i = r.y + 30, e = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    e.setAttribute("d", `M ${r.x} ${r.y} L ${r.x} ${i} L ${c.x} ${i} L ${c.x} ${c.y}`), e.setAttribute("class", "edge-path"), e.setAttribute("stroke", "#9ca3af"), e.setAttribute("fill", "none"), e.setAttribute("stroke-width", "2"), n == null || n.prepend(e);
+    const n = (a = this.shadowRoot) == null ? void 0 : a.querySelector("#canvas"), r = e.type === "wait" || e.type === "end" ? e.x : e.x + 110, s = e.type === "wait" || e.type === "end" ? e.y + 45 : e.y + 90, l = i.type === "wait" || i.type === "end" ? i.x : i.x + 110, c = i.type === "wait" || i.type === "end" ? i.y - 45 : i.y, h = s + 30, u = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    u.setAttribute("class", "edge-container");
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    t.setAttribute("d", `M ${r} ${s} L ${r} ${h} L ${l} ${h} L ${l} ${c}`), t.setAttribute("class", "edge-path"), t.setAttribute("stroke", "#9ca3af"), t.setAttribute("fill", "none"), t.setAttribute("stroke-width", "2"), t.setAttribute("marker-end", "url(#arrowhead)"), u.appendChild(t);
+    const o = this.createTrashIcon((r + l) / 2, h);
+    o.setAttribute("data-edge-source", e.id), o.setAttribute("data-edge-target", i.id), u.appendChild(o), n == null || n.prepend(u);
   }
   render() {
     this.shadowRoot && (this.shadowRoot.innerHTML = `
@@ -131,40 +230,40 @@ class w extends HTMLElement {
         :host { --primary: #4f46e5; font-family: 'Inter', sans-serif; }
         .workflow-container { display: flex; height: 100vh; overflow: hidden; background: #fff; }
         .sidebar { width: 140px; padding: 20px; background: #f9fafb; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; align-items: center; gap: 20px; }
-        .node-palette-item { 
-          width: 90px; padding: 12px 0; text-align: center; border: 1px solid #d1d5db; 
-          cursor: grab; font-size: 12px; background: white; font-weight: 500;
-        }
-        .item-rect { border-radius: 8px; }
-        .item-circle { border-radius: 50%; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; }
-        
-        .item-audience { background: #eff6ff; } .item-filter { background: #fff7ed; }
-        .item-split { background: #f0fdf4; } .item-action { background: #fefce8; }
-        .item-wait { background: #f3f4f6; } .item-end { background: #fee2e2; }
-
+        .node-palette-item { width: 90px; padding: 12px 0; text-align: center; border: 1px solid #d1d5db; cursor: grab; font-size: 12px; background: white; font-weight: 500; border-radius: 8px; }
+        .item-audience { background: #eff6ff; } .item-filter { background: #fff7ed; } .item-split { background: #f0fdf4; } .item-action { background: #fefce8; } .item-wait, .item-end { border-radius: 50%; width: 60px; }
         .canvas-area { flex-grow: 1; position: relative; overflow: auto; background-image: radial-gradient(#e5e7eb 1.2px, transparent 1.2px); background-size: 24px 24px; }
-        #canvas { min-width: 4000px; min-height: 4000px; }
-        
-        #export-btn { position: absolute; top: 20px; right: 40px; background: var(--primary); color: white; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        #canvas { min-width: 4000px; min-height: 4000px; outline: none; }
+        .trash-btn { opacity: 0; cursor: pointer; transition: opacity 0.2s; }
+        .node-group:hover .trash-btn, .edge-container:hover .trash-btn { opacity: 1; }
+        .node-group.selected circle, .node-group.selected rect { stroke: var(--primary) !important; stroke-width: 3px !important; }
+        .toolbar { position: absolute; top: 20px; right: 40px; display: flex; gap: 10px; z-index: 10; }
+        .btn { background: var(--primary); color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .btn-secondary { background: #fff; color: #374151; border: 1px solid #d1d5db; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .modal-content { background: white; padding: 30px; border-radius: 16px; width: 320px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
-        input { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #d1d5db; border-radius: 8px; box-sizing: border-box; }
-        #add { background: var(--primary); color: white; border: none; width: 100%; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .modal-content { background: white; padding: 30px; border-radius: 16px; width: 320px; }
+        input, select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #d1d5db; border-radius: 8px; box-sizing: border-box; }
       </style>
       <div class="workflow-container">
         <aside class="sidebar">
-          <div class="node-palette-item item-rect item-audience" draggable="true" data-type="audience">Audience</div>
-          <div class="node-palette-item item-rect item-filter" draggable="true" data-type="filter">Filter</div>
-          <div class="node-palette-item item-rect item-split" draggable="true" data-type="split">Split</div>
-          <div class="node-palette-item item-rect item-action" draggable="true" data-type="action">Action</div>
-          <div class="node-palette-item item-circle item-wait" draggable="true" data-type="wait">Wait</div>
-          <div class="node-palette-item item-circle item-end" draggable="true" data-type="end">End</div>
+          <div class="node-palette-item item-audience" draggable="true" data-type="audience">Audience</div>
+          <div class="node-palette-item item-filter" draggable="true" data-type="filter">Filter</div>
+          <div class="node-palette-item item-split" draggable="true" data-type="split">Split</div>
+          <div class="node-palette-item item-action" draggable="true" data-type="action">Action</div>
+          <div class="node-palette-item item-wait" draggable="true" data-type="wait">Wait</div>
+          <div class="node-palette-item item-end" draggable="true" data-type="end">End</div>
         </aside>
         <main class="canvas-area">
-          <button id="export-btn">Export JSON</button>
-          <svg id="canvas" width="4000" height="4000"></svg>
+          <div class="toolbar">
+            <button id="undo-btn" class="btn btn-secondary">Undo</button>
+            <button id="redo-btn" class="btn btn-secondary">Redo</button>
+            <button id="export-btn" class="btn">Export JSON</button>
+          </div>
+          <svg id="canvas" width="4000" height="4000" tabindex="0">
+            <defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#9ca3af" /></marker></defs>
+          </svg>
         </main>
       </div>`, this.setupListeners());
   }
 }
-customElements.define("c1x-workflow-builder", w);
+customElements.define("c1x-workflow-builder", y);
