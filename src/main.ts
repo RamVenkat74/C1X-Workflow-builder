@@ -19,10 +19,19 @@ class C1XWorkflowBuilder extends HTMLElement {
     window.addEventListener('keydown', this.onKeyDown.bind(this));
   }
 
+  disconnectedCallback() {
+    window.removeEventListener('keydown', this.onKeyDown.bind(this));
+  }
+
   private onKeyDown(e: KeyboardEvent) {
     if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedNodeId) {
       this.engine.deleteNode(this.selectedNodeId);
       this.selectedNodeId = null;
+      this.refreshCanvas();
+    }
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === 'z') e.shiftKey ? this.engine.redo() : this.engine.undo();
+      else if (e.key === 'y') this.engine.redo();
       this.refreshCanvas();
     }
   }
@@ -47,13 +56,17 @@ class C1XWorkflowBuilder extends HTMLElement {
     });
 
     canvas?.addEventListener('click', (e) => {
-      const trash = (e.target as HTMLElement).closest('.trash-btn');
-      if (trash) {
-        const nId = trash.getAttribute('data-node-id');
-        const eSrc = trash.getAttribute('data-edge-source');
-        const eTrg = trash.getAttribute('data-edge-target');
-        if (nId) this.engine.deleteNode(nId);
-        else if (eSrc && eTrg) this.engine.deleteEdge(eSrc, eTrg);
+      const trashBtn = (e.target as HTMLElement).closest('.trash-btn');
+      if (trashBtn) {
+        const nodeId = trashBtn.getAttribute('data-node-id');
+        const edgeSource = trashBtn.getAttribute('data-edge-source');
+        const edgeTarget = trashBtn.getAttribute('data-edge-target');
+        if (nodeId) {
+          this.engine.deleteNode(nodeId);
+          this.selectedNodeId = null;
+        } else if (edgeSource && edgeTarget) {
+          this.engine.deleteEdge(edgeSource, edgeTarget);
+        }
         this.refreshCanvas();
       }
     });
@@ -63,7 +76,8 @@ class C1XWorkflowBuilder extends HTMLElement {
         const x = e.clientX - this.offset.x;
         const y = e.clientY - this.offset.y;
         this.dragNode.setAttribute("transform", `translate(${x}, ${y})`);
-        const node = this.nodes.find(n => n.id === this.dragNode!.getAttribute('data-id'));
+        const id = this.dragNode.getAttribute('data-id');
+        const node = this.nodes.find(n => n.id === id);
         if (node) { node.x = x; node.y = y; }
         this.updateEdges();
       }
@@ -92,7 +106,6 @@ class C1XWorkflowBuilder extends HTMLElement {
       const link = document.createElement('a');
       link.href = url;
       link.download = `workflow-${Date.now()}.json`;
-      // Fix: Append to body for certain browsers
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -102,18 +115,29 @@ class C1XWorkflowBuilder extends HTMLElement {
 
   private refreshCanvas() {
     const canvas = this.shadowRoot?.querySelector('#canvas');
+    const placeholder = this.shadowRoot?.querySelector('#canvas-placeholder') as HTMLElement;
+
     if (canvas) {
       const defs = canvas.querySelector('defs');
       canvas.innerHTML = '';
       if (defs) canvas.appendChild(defs);
     }
+
     const engineNodes = this.engine.getNodes();
     const engineEdges = this.engine.getEdges();
+
+    if (engineNodes.length > 0) {
+      placeholder.style.display = 'none';
+    } else {
+      placeholder.style.display = 'flex';
+    }
+
     this.nodes = engineNodes.map(n => ({
       id: n.id, type: n.type, x: n.position.x, y: n.position.y,
       text: n.params.segmentName,
       parentId: engineEdges.find(e => e.target === n.id)?.source || null
     }));
+
     this.nodes.forEach(n => this.renderNodeOnCanvas(n.id, n.type, n.x, n.y, n.text));
     this.updateEdges();
   }
@@ -121,29 +145,27 @@ class C1XWorkflowBuilder extends HTMLElement {
   private openConfigModal(type: NodeType, x: number, y: number) {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
-
     let html = '';
     switch (type) {
       case 'audience': html = `<input type="text" id="p1" placeholder="Segment Name">`; break;
       case 'wait': html = `<input type="number" id="p1" placeholder="Duration"><select id="p2"><option value="Minutes">Minutes</option><option value="Hours">Hours</option><option value="Days">Days</option></select>`; break;
-      case 'filter': html = `<select id="p1"><option value="Opened Email">Opened Email</option><option value="Purchased">Purchased</option></select><input type="text" id="p2" placeholder="Value (True/False)">`; break;
+      case 'filter': html = `<select id="p1"><option value="Opened Email">Opened Email</option><option value="Purchased">Purchased</option></select><input type="text" id="p2" placeholder="Value">`; break;
       case 'action': html = `<select id="p1"><option value="Email">Email</option><option value="SMS">SMS</option><option value="WhatsApp">WhatsApp</option></select><input type="text" id="p2" placeholder="Template ID">`; break;
-      default: html = `<input type="text" id="p1" placeholder="Label">`;
+      default: html = `<input type="text" id="p1" placeholder="Description">`;
     }
 
-    modal.innerHTML = `<div class="modal-content"><h3>${type.toUpperCase()}</h3>${html}<button id="save">Save</button></div>`;
+    modal.innerHTML = `<div class="modal-content"><h3>${type.toUpperCase()}</h3>${html}<button id="save">Save Changes</button></div>`;
     this.shadowRoot?.appendChild(modal);
 
     modal.querySelector('#save')?.addEventListener('click', () => {
-      const v1 = (modal.querySelector('#p1') as any).value;
-      const v2 = (modal.querySelector('#p2') as any)?.value;
+      const val1 = (modal.querySelector('#p1') as any)?.value;
+      const val2 = (modal.querySelector('#p2') as any)?.value;
       const params: NodeParams = {};
-
-      if (type === 'audience') params.segmentName = v1;
-      else if (type === 'wait') { params.duration = Number(v1); params.unit = v2; params.segmentName = `Wait ${v1} ${v2}`; }
-      else if (type === 'filter') { params.condition = v1; params.value = v2; params.segmentName = `${v1}: ${v2}`; }
-      else if (type === 'action') { params.channel = v1; params.templateId = v2; params.segmentName = `Send ${v1}`; }
-      else params.segmentName = v1;
+      if (type === 'audience') params.segmentName = val1;
+      else if (type === 'wait') { params.duration = Number(val1); params.unit = val2; params.segmentName = `Wait ${val1} ${val2}`; }
+      else if (type === 'filter') { params.condition = val1; params.value = val2; params.segmentName = `${val1}: ${val2}`; }
+      else if (type === 'action') { params.channel = val1; params.templateId = val2; params.segmentName = `Send ${val1}`; }
+      else params.segmentName = val1;
 
       const id = `node-${Date.now()}`;
       let pId = this.nodes.length > 0 ? this.nodes[this.nodes.length - 1].id : null;
@@ -177,7 +199,7 @@ class C1XWorkflowBuilder extends HTMLElement {
       r.setAttribute("width", "220"); r.setAttribute("height", "90"); r.setAttribute("rx", "10"); r.setAttribute("fill", this.getColor(type)); r.setAttribute("stroke", "#d1d5db");
       g.appendChild(r);
       const h = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      h.setAttribute("x", "15"); h.setAttribute("y", "25"); h.style.fontSize = "10px"; h.style.fill = "#9ca3af"; h.textContent = type.toUpperCase();
+      h.setAttribute("x", "15"); h.setAttribute("y", "25"); h.style.fontSize = "10px"; h.style.fill = "#9ca3af"; h.style.fontWeight = "600"; h.textContent = type.toUpperCase();
       g.appendChild(h);
       const b = document.createElementNS("http://www.w3.org/2000/svg", "text");
       b.setAttribute("x", "15"); b.setAttribute("y", "55"); b.style.fontSize = "13px"; b.style.fontWeight = "500"; b.textContent = text;
@@ -196,10 +218,12 @@ class C1XWorkflowBuilder extends HTMLElement {
     c.setAttribute("r", "12"); c.setAttribute("fill", "#ef4444");
     g.appendChild(c);
     const l1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    l1.setAttribute("x1", "-5"); l1.setAttribute("y1", "-5"); l1.setAttribute("x2", "5"); l1.setAttribute("y2", "5"); l1.setAttribute("stroke", "white"); l1.setAttribute("stroke-width", "2");
+    l1.setAttribute("x1", "-5"); l1.setAttribute("y1", "-5"); l1.setAttribute("x2", "5"); l1.setAttribute("y2", "5");
+    l1.setAttribute("stroke", "white"); l1.setAttribute("stroke-width", "2");
     g.appendChild(l1);
     const l2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    l2.setAttribute("x1", "5"); l2.setAttribute("y1", "-5"); l2.setAttribute("x2", "-5"); l2.setAttribute("y2", "5"); l2.setAttribute("stroke", "white"); l2.setAttribute("stroke-width", "2");
+    l2.setAttribute("x1", "5"); l2.setAttribute("y1", "-5"); l2.setAttribute("x2", "-5"); l2.setAttribute("y2", "5");
+    l2.setAttribute("stroke", "white"); l2.setAttribute("stroke-width", "2");
     g.appendChild(l2);
     return g;
   }
@@ -247,20 +271,66 @@ class C1XWorkflowBuilder extends HTMLElement {
       <style>
         :host { --primary: #4f46e5; font-family: 'Inter', sans-serif; }
         .workflow-container { display: flex; height: 100vh; overflow: hidden; background: #fff; }
-        .sidebar { width: 140px; padding: 20px; background: #f9fafb; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; align-items: center; gap: 20px; }
-        .node-palette-item { width: 90px; padding: 12px 0; text-align: center; border: 1px solid #d1d5db; cursor: grab; font-size: 12px; background: white; font-weight: 500; border-radius: 8px; }
-        .item-audience { background: #eff6ff; } .item-filter { background: #fff7ed; } .item-split { background: #f0fdf4; } .item-action { background: #fefce8; } .item-wait, .item-end { border-radius: 50%; width: 60px; }
+        
+        /* Sidebar Styling */
+        .sidebar { width: 160px; padding: 30px 20px; background: #111827; border-right: 1px solid #374151; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        .node-palette-item { 
+          width: 100%; 
+          padding: 12px 0; 
+          text-align: center; 
+          border: 1px solid rgba(255,255,255,0.1); 
+          cursor: grab; 
+          font-size: 13px; 
+          font-weight: 500; 
+          border-radius: 999px; 
+          transition: all 0.2s ease; 
+          box-sizing: border-box; 
+        }
+        
+        .item-wait, .item-end { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+
+        .item-audience { background-color: #f0f7ff; color: #1e3a8a; } 
+        .item-filter { background-color: #fffaf0; color: #9a6609; }
+        .item-split { background-color: #f0fdf4; color: #166534; } 
+        .item-action { background-color: #fffdf0; color: #854d0e; }
+        .item-wait { background-color: #f3f4f6; color: #374151; } 
+        .item-end { background-color: #fee2e2; color: #991b1b; }
+
+        .node-palette-item:hover { border-color: rgba(255,255,255,0.4); transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+        
+        /* Canvas Area */
         .canvas-area { flex-grow: 1; position: relative; overflow: auto; background-image: radial-gradient(#e5e7eb 1.2px, transparent 1.2px); background-size: 24px 24px; }
         #canvas { min-width: 4000px; min-height: 4000px; outline: none; }
+        
+        /* Placeholder Styling */
+        #canvas-placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            color: #9ca3af;
+            text-align: center;
+        }
+        #canvas-placeholder h2 { font-size: 20px; font-weight: 600; margin: 0 0 8px 0; color: #4b5563; }
+        #canvas-placeholder p { font-size: 14px; margin: 0; }
+
+        /* Other UI Elements */
         .trash-btn { opacity: 0; cursor: pointer; transition: opacity 0.2s; }
         .node-group:hover .trash-btn, .edge-container:hover .trash-btn { opacity: 1; }
-        .node-group.selected circle, .node-group.selected rect { stroke: var(--primary) !important; stroke-width: 3px !important; }
+        .node-group.selected circle, .node-group.selected rect { stroke: var(--primary) !important; stroke-width: 3px !important; filter: drop-shadow(0 0 5px rgba(79, 70, 229, 0.4)); }
+        .edge-container:hover .edge-path { stroke: #ef4444 !important; }
         .toolbar { position: absolute; top: 20px; right: 40px; display: flex; gap: 10px; z-index: 10; }
-        .btn { background: var(--primary); color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .btn { background: var(--primary); color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: 600; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
         .btn-secondary { background: #fff; color: #374151; border: 1px solid #d1d5db; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .modal-content { background: white; padding: 30px; border-radius: 16px; width: 320px; }
-        input, select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #d1d5db; border-radius: 8px; box-sizing: border-box; }
+        .modal-content { background: white; padding: 30px; border-radius: 16px; width: 320px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+        input, select { width: 100%; padding: 12px; margin: 12px 0; border: 1px solid #e5e7eb; border-radius: 8px; box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.2s; }
+        input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+        #save { background: var(--primary); color: white; border: none; width: 100%; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s ease; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); margin-top: 10px; }
+        #save:hover { background: #4338ca; transform: translateY(-1px); box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3); }
       </style>
       <div class="workflow-container">
         <aside class="sidebar">
@@ -272,6 +342,10 @@ class C1XWorkflowBuilder extends HTMLElement {
           <div class="node-palette-item item-end" draggable="true" data-type="end">End</div>
         </aside>
         <main class="canvas-area">
+          <div id="canvas-placeholder">
+            <h2>Ready to build?</h2>
+            <p>Drag and drop components from the sidebar to start building your workflow.</p>
+          </div>
           <div class="toolbar">
             <button id="undo-btn" class="btn btn-secondary">Undo</button>
             <button id="redo-btn" class="btn btn-secondary">Redo</button>
