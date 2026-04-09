@@ -1,5 +1,3 @@
-// src/types.ts
-
 export type NodeType = 'audience' | 'filter' | 'wait' | 'action' | 'split' | 'end';
 
 export interface NodeParams {
@@ -9,6 +7,7 @@ export interface NodeParams {
     condition?: string;
     channel?: string;
     templateId?: string;
+    value?: string;
 }
 
 export interface Node {
@@ -23,7 +22,6 @@ export interface Edge {
     target: string;
 }
 
-// This is the missing member causing the error
 export interface WorkflowData {
     workflowId: string;
     nodes: Node[];
