@@ -69,6 +69,7 @@ export class WorkflowEngine {
         return false;
     }
 
+
     public getNodes() { return [...this.nodes]; }
     public getEdges() { return [...this.edges]; }
 

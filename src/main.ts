@@ -36,7 +36,6 @@ class C1XWorkflowBuilder extends HTMLElement {
     }
   }
 
-  // 🚀 New Helper to grow canvas dynamically
   private adjustCanvasSize() {
     const canvas = this.shadowRoot?.querySelector('#canvas') as SVGSVGElement;
     if (!canvas || this.nodes.length === 0) return;
@@ -95,7 +94,7 @@ class C1XWorkflowBuilder extends HTMLElement {
         const node = this.nodes.find(n => n.id === id);
         if (node) { node.x = x; node.y = y; }
         this.updateEdges();
-        this.adjustCanvasSize(); // Call resize during drag
+        this.adjustCanvasSize();
       }
     });
 
@@ -156,7 +155,7 @@ class C1XWorkflowBuilder extends HTMLElement {
 
     this.nodes.forEach(n => this.renderNodeOnCanvas(n.id, n.type, n.x, n.y, n.text));
     this.updateEdges();
-    this.adjustCanvasSize(); // Call resize after render/refresh
+    this.adjustCanvasSize();
   }
 
   private openConfigModal(type: NodeType, x: number, y: number) {
@@ -212,17 +211,44 @@ class C1XWorkflowBuilder extends HTMLElement {
       t.setAttribute("text-anchor", "middle"); t.setAttribute("dy", "5"); t.style.fontSize = "11px"; t.textContent = text;
       g.appendChild(t);
     } else {
+      // 💡 Calculate dynamic height based on text length (approx 30 chars per line)
+      const charsPerLine = 30;
+      const lines = Math.ceil((text?.length || 0) / charsPerLine) || 1;
+      const dynamicHeight = 70 + (lines * 16);
+
       const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      r.setAttribute("width", "220"); r.setAttribute("height", "90"); r.setAttribute("rx", "10"); r.setAttribute("fill", this.getColor(type)); r.setAttribute("stroke", "#d1d5db");
+      r.setAttribute("width", "240");
+      r.setAttribute("height", `${dynamicHeight}`);
+      r.setAttribute("rx", "12");
+      r.setAttribute("fill", this.getColor(type));
+      r.setAttribute("stroke", "#d1d5db");
       g.appendChild(r);
+
       const h = document.createElementNS("http://www.w3.org/2000/svg", "text");
       h.setAttribute("x", "15"); h.setAttribute("y", "25"); h.style.fontSize = "10px"; h.style.fill = "#9ca3af"; h.style.fontWeight = "600"; h.textContent = type.toUpperCase();
       g.appendChild(h);
-      const b = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      b.setAttribute("x", "15"); b.setAttribute("y", "55"); b.style.fontSize = "13px"; b.style.fontWeight = "500"; b.textContent = text;
-      g.appendChild(b);
+
+      // Use foreignObject for automatic text wrapping
+      const foreignObject = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
+      foreignObject.setAttribute("x", "15");
+      foreignObject.setAttribute("y", "38");
+      foreignObject.setAttribute("width", "210");
+      foreignObject.setAttribute("height", `${dynamicHeight - 45}`);
+
+      const div = document.createElement("div");
+      div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+      div.style.fontSize = "13px";
+      div.style.lineHeight = "1.5";
+      div.style.color = "#1f2937";
+      div.style.fontWeight = "500";
+      div.style.wordWrap = "break-word";
+      div.style.fontFamily = "'Inter', sans-serif";
+      div.textContent = text;
+
+      foreignObject.appendChild(div);
+      g.appendChild(foreignObject);
     }
-    const trash = this.createTrashIcon(type === 'wait' || type === 'end' ? 35 : 210, type === 'wait' || type === 'end' ? -35 : -10);
+    const trash = this.createTrashIcon(type === 'wait' || type === 'end' ? 35 : 230, type === 'wait' || type === 'end' ? -35 : -10);
     trash.setAttribute('data-node-id', id);
     g.appendChild(trash);
     canvas?.appendChild(g);
@@ -263,9 +289,9 @@ class C1XWorkflowBuilder extends HTMLElement {
 
   private drawManhattanEdge(n1: any, n2: any) {
     const canvas = this.shadowRoot?.querySelector('#canvas');
-    const sX = (n1.type === 'wait' || n1.type === 'end') ? n1.x : n1.x + 110;
+    const sX = (n1.type === 'wait' || n1.type === 'end') ? n1.x : n1.x + 120;
     const sY = (n1.type === 'wait' || n1.type === 'end') ? n1.y + 45 : n1.y + 90;
-    const eX = (n2.type === 'wait' || n2.type === 'end') ? n2.x : n2.x + 110;
+    const eX = (n2.type === 'wait' || n2.type === 'end') ? n2.x : n2.x + 120;
     const eY = (n2.type === 'wait' || n2.type === 'end') ? n2.y - 45 : n2.y;
     const midY = sY + 30;
     const container = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -289,7 +315,7 @@ class C1XWorkflowBuilder extends HTMLElement {
         :host { --primary: #4f46e5; font-family: 'Inter', sans-serif; }
         .workflow-container { display: flex; height: 100vh; overflow: hidden; background: #fff; }
         .sidebar { width: 160px; padding: 30px 20px; background: #111827; border-right: 1px solid #374151; display: flex; flex-direction: column; align-items: center; gap: 20px; }
-        .node-palette-item { width: 100%; padding: 12px 0; text-align: center; border: 1px solid rgba(255,255,255,0.1); cursor: grab; font-size: 13px; font-weight: 500; border-radius: 999px; transition: all 0.2s ease; }
+        .node-palette-item { width: 100%; padding: 12px 0; text-align: center; border: 1px solid rgba(255,255,255,0.1); cursor: grab; font-size: 13px; font-weight: 500; border-radius: 999px; transition: all 0.2s ease; box-sizing: border-box; }
         .item-wait, .item-end { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
         .item-audience { background-color: #f0f7ff; color: #1e3a8a; } 
         .item-filter { background-color: #fffaf0; color: #9a6609; }
@@ -298,13 +324,8 @@ class C1XWorkflowBuilder extends HTMLElement {
         .item-wait { background-color: #f3f4f6; color: #374151; } 
         .item-end { background-color: #fee2e2; color: #991b1b; }
         .node-palette-item:hover { border-color: rgba(255,255,255,0.4); transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
-
-        /* Modified Canvas Area */
         .canvas-area { flex-grow: 1; position: relative; overflow: auto; background-image: radial-gradient(#e5e7eb 1.2px, transparent 1.2px); background-size: 24px 24px; background-color: #fcfcfc; }
-        
-        /* Modified Canvas SVG - Dynamic */
         #canvas { display: block; outline: none; overflow: visible; }
-        
         #canvas-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; color: #9ca3af; text-align: center; }
         #canvas-placeholder h2 { font-size: 20px; font-weight: 600; margin: 0 0 8px 0; color: #4b5563; }
         #canvas-placeholder p { font-size: 14px; margin: 0; }
